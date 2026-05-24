@@ -76,7 +76,7 @@ async function loadX2t(): Promise<X2tModule> {
           reject(new Error("x2t runtime initialized without expected exports"));
         }
       }
-    } as X2tModule;
+    } as unknown as X2tModule;
 
     const script = document.createElement("script");
     script.src = `${X2T_BASE_URL}x2t.js`;
@@ -155,4 +155,3 @@ function escapeXml(value: string): string {
     return entities[char];
   });
 }
-
