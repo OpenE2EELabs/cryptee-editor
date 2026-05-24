@@ -22,6 +22,8 @@ type CryptPadDocEditor = {
   processRightsChange?: (enabled: boolean) => void;
 };
 
+export type OnlyOfficeDocumentFileType = FileType;
+
 type OnlyOfficeMockServer = {
   getInitialChanges: () => unknown[];
   getParticipants: () => {
@@ -99,7 +101,11 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
 
   setMode(mode: EditorMode): void {
     this.options.mode = mode;
-    this.editor?.processRightsChange?.(mode === "edit");
+    try {
+      this.editor?.processRightsChange?.(mode === "edit");
+    } catch (error) {
+      console.warn("ONLYOFFICE rejected runtime rights update", error);
+    }
   }
 
   setDisplayName(name: string): void {
@@ -133,7 +139,7 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
       type: "desktop",
       documentType: documentTypeFor(this.options.fileType),
       document: {
-        fileType: "bin",
+        fileType: documentFileTypeFor(this.options.fileType),
         key: crypto.randomUUID(),
         title: this.options.title,
         url: this.blobUrl,
@@ -298,4 +304,10 @@ function documentTypeFor(fileType: FileType): "word" | "cell" | "slide" {
     return "slide";
   }
   return "word";
+}
+
+export function documentFileTypeFor(
+  fileType: FileType,
+): OnlyOfficeDocumentFileType {
+  return fileType;
 }
