@@ -92,11 +92,11 @@ class PlaceholderOnlyOfficeAdapter implements EditorAdapter {
     document.querySelector(".placeholder-editor")?.setAttribute("contenteditable", String(editable));
   }
 
-  setDisplayName(_name: string): void {}
+  setDisplayName(): void {}
 
-  applyRemotePatch(_patch: ArrayBuffer): void {}
+  applyRemotePatch(): void {}
 
-  onLocalPatch(_handler: (patch: ArrayBuffer) => void): void {}
+  onLocalPatch(): void {}
 
   onSaveRequest(handler: () => void): void {
     this.saveHandler = handler;
