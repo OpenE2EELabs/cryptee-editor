@@ -19,7 +19,7 @@ The editor reads configuration from the URL fragment. Fragments are not sent to 
 | `sessionId` | No | UUID or equivalent opaque ID for collaboration. Omit for solo editing. |
 | `relayUrl` | No | WebSocket URL for the ChainPad relay. Defaults to the build-time configured relay. |
 | `callbackOrigin` | Yes | Origin allowed to receive events and send commands. The editor refuses to load without it. |
-| `saveUrl` | No | HTTPS PUT/POST URL for direct upload of saved encrypted bytes. If absent, the parent handles `editor:saved`. |
+| `saveUrl` | No | HTTPS PUT/POST URL for direct upload of saved encrypted bytes. If absent, the parent handles `editor:saved`. Saved bytes are the internal `cryptee-office-session-v1` format unless the parent explicitly requests export. |
 | `displayName` | No | User-visible filename. |
 | `userId` | No | Opaque collaboration user ID for presence display only. |
 | `userDisplayName` | No | User-visible collaboration display name. |
@@ -32,7 +32,7 @@ All events are sent to `callbackOrigin`.
 { type: "editor:ready", version: string }
 { type: "editor:document-loaded" }
 { type: "editor:saving" }
-{ type: "editor:saved", encryptedBytes: ArrayBuffer, contentType: string }
+{ type: "editor:saved", encryptedBytes: ArrayBuffer, contentType: string, documentFormat: "cryptee-office-session-v1" | "ooxml" }
 { type: "editor:save-uploaded" }
 { type: "editor:error", code: string, message: string }
 { type: "editor:exit" }
@@ -46,10 +46,13 @@ The editor accepts these events only from `callbackOrigin`.
 
 ```ts
 { type: "parent:save-request" }
+{ type: "parent:export-request", format: "docx" | "xlsx" | "pptx" }
 { type: "parent:exit-request" }
 { type: "parent:update-permissions", mode: "edit" | "view" }
 { type: "parent:set-display-name", name: string }
 ```
+
+`parent:save-request` stores the current encrypted editing session. `parent:export-request` converts the current session back to OOXML and emits `editor:saved` with `documentFormat: "ooxml"`. Production integrations should store `cryptee-office-session-v1` as the active editing object and export OOXML only for download, finalization, or compatibility handoff.
 
 ## Error Codes
 
@@ -74,6 +77,24 @@ Files use AES-256-GCM:
 - File bytes: `nonce || ciphertext || tag`.
 
 Compatible implementations must prepend the 12-byte nonce to the AES-GCM output. A decryptor reads the first 12 bytes as nonce and authenticates the remaining bytes.
+
+## Internal Office Session Format
+
+After the first import, cryptee-editor stores the editable document as an encrypted `cryptee-office-session-v1` object instead of repeatedly converting the original OOXML file. The decrypted plaintext is JSON with:
+
+```json
+{
+  "version": "cryptee-office-session-v1",
+  "fileType": "docx",
+  "editorBinBase64": "...",
+  "media": {},
+  "changes": [],
+  "createdAt": "2026-05-24T00:00:00.000Z",
+  "updatedAt": "2026-05-24T00:00:00.000Z"
+}
+```
+
+The whole session object is encrypted with the AES-256-GCM file format above before storage. Collaboration patches are encrypted separately with a session key derived from `fileKey` and `sessionId`, then routed as opaque bytes through the relay.
 
 ## Example: Full Integration Flow
 
@@ -109,6 +130,8 @@ window.addEventListener("message", async (event) => {
 });
 ```
 
+The first save should replace the active editable object with the returned `cryptee-office-session-v1` bytes. When a user needs a standard Office file, send `{ type: "parent:export-request", format: "docx" }` and store or download the returned `documentFormat: "ooxml"` bytes.
+
 ## Versioning And Compatibility
 
 The editor emits `editor:ready` with its implementation version. Breaking protocol changes require a new major protocol version and documentation page. Protocol v1 events must remain stable within v1.
@@ -116,4 +139,3 @@ The editor emits `editor:ready` with its implementation version. Breaking protoc
 ## Why This Protocol?
 
 The protocol keeps the editor independent from storage providers, identity providers, and application-specific business logic. Any caller that can store encrypted bytes, generate a key in the browser, open an iframe or tab, and listen for `postMessage` can integrate cryptee-editor.
-

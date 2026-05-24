@@ -1,5 +1,12 @@
 export type FileType = "docx" | "xlsx" | "pptx";
 export type EditorMode = "edit" | "view";
+export type DocumentFormat = "ooxml" | "cryptee-office-session-v1";
+
+export interface SaveResult {
+  encryptedBytes: ArrayBuffer;
+  contentType: string;
+  documentFormat: DocumentFormat;
+}
 
 export interface EditorConfig {
   fileUrl: string;
@@ -29,7 +36,12 @@ export type EditorToParentEvent =
   | { type: "editor:ready"; version: string }
   | { type: "editor:document-loaded" }
   | { type: "editor:saving" }
-  | { type: "editor:saved"; encryptedBytes: ArrayBuffer; contentType: string }
+  | {
+      type: "editor:saved";
+      encryptedBytes: ArrayBuffer;
+      contentType: string;
+      documentFormat: DocumentFormat;
+    }
   | { type: "editor:save-uploaded" }
   | { type: "editor:error"; code: EditorErrorCode; message: string }
   | { type: "editor:exit" }
@@ -38,6 +50,7 @@ export type EditorToParentEvent =
 
 export type ParentToEditorEvent =
   | { type: "parent:save-request" }
+  | { type: "parent:export-request"; format: FileType }
   | { type: "parent:exit-request" }
   | { type: "parent:update-permissions"; mode: EditorMode }
   | { type: "parent:set-display-name"; name: string };
@@ -51,4 +64,3 @@ export interface EditorAdapter {
   onLocalPatch(handler: (patch: ArrayBuffer) => void): void;
   onSaveRequest(handler: () => void): void;
 }
-

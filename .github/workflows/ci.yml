@@ -16,7 +16,7 @@ jobs:
           cache: npm
           cache-dependency-path: editor/package.json
       - working-directory: editor
-        run: npm install
+        run: npm ci
       - working-directory: editor
         run: npm run typecheck
       - working-directory: editor

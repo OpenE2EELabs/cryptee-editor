@@ -56,16 +56,27 @@ document.body.append(iframe);
 window.addEventListener("message", async (event) => {
   if (event.origin !== "https://editor.example.com") return;
   if (event.data?.type === "editor:saved") {
-    await uploadEncryptedBytes(event.data.encryptedBytes);
+    await uploadEncryptedBytes(event.data.encryptedBytes, {
+      contentType: event.data.contentType,
+      documentFormat: event.data.documentFormat
+    });
   }
 });
 ```
 
 If you provide `saveUrl`, cryptee-editor uploads encrypted bytes directly and then emits both `editor:save-uploaded` and `editor:saved`.
 
+For production editing, store the returned `documentFormat: "cryptee-office-session-v1"` bytes as the active editable file. This avoids converting the original DOCX/XLSX/PPTX on every open. To produce a standard Office download, send:
+
+```ts
+iframe.contentWindow?.postMessage({ type: "parent:export-request", format: "docx" }, "https://editor.example.com");
+```
+
+The next `editor:saved` event will contain encrypted OOXML bytes with `documentFormat: "ooxml"`.
+
 ## Step 6: Collaboration
 
-Generate a fresh `sessionId` for a collaborative editing room and share the same `sessionId`, `fileKey`, `fileUrl`, and `relayUrl` with authorized users. The relay routes encrypted patches only. It does not enforce authorization.
+Generate a fresh `sessionId` for a collaborative editing room and share the same `sessionId`, `fileKey`, `fileUrl`, and `relayUrl` with authorized users. The editor derives a collaboration key from `fileKey` and `sessionId`, encrypts ONLYOFFICE change payloads in the browser, and sends only opaque bytes to the relay. The relay does not enforce authorization.
 
 ## Security Considerations For Integrators
 
@@ -89,4 +100,3 @@ Generate a fresh `sessionId` for a collaborative editing room and share the same
 - `decrypt-failed`: confirm the key matches the encrypted bytes.
 - `editor-load-failed`: run `scripts/fetch-vendor.sh` and rebuild.
 - `relay-connection-failed`: test the WebSocket endpoint and TLS certificate.
-

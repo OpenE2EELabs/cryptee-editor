@@ -27,7 +27,7 @@ jobs:
           cache: npm
           cache-dependency-path: editor/package.json
       - working-directory: editor
-        run: npm install
+        run: npm ci
       - run: ./scripts/fetch-vendor.sh
         env:
           GH_TOKEN: ${{ github.token }}

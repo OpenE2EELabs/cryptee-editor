@@ -1,4 +1,9 @@
-import type { EditorConfig, EditorToParentEvent, FileType, ParentToEditorEvent } from "./types";
+import type {
+  EditorConfig,
+  EditorToParentEvent,
+  FileType,
+  ParentToEditorEvent,
+} from "./types";
 
 const DEFAULT_RELAY_URL = "wss://relay.cryptee-editor.example/"; // TODO: replace after community relay deployment.
 const SUPPORTED_FILE_TYPES: readonly FileType[] = ["docx", "xlsx", "pptx"];
@@ -13,11 +18,18 @@ export class ProtocolError extends Error {
 export function parseFragment(hash = window.location.hash): EditorConfig {
   const raw = hash.startsWith("#") ? hash.slice(1) : hash;
   const params = new URLSearchParams(raw);
-  const required = ["fileUrl", "fileKey", "fileType", "callbackOrigin"] as const;
+  const required = [
+    "fileUrl",
+    "fileKey",
+    "fileType",
+    "callbackOrigin",
+  ] as const;
 
   for (const key of required) {
     if (!params.get(key)) {
-      throw new ProtocolError(`Missing required URL fragment parameter: ${key}`);
+      throw new ProtocolError(
+        `Missing required URL fragment parameter: ${key}`,
+      );
     }
   }
 
@@ -40,7 +52,11 @@ export function parseFragment(hash = window.location.hash): EditorConfig {
   }
 
   const saveUrl = params.get("saveUrl") ?? undefined;
-  if (saveUrl && !saveUrl.startsWith("https://") && !saveUrl.startsWith("blob:")) {
+  if (
+    saveUrl &&
+    !saveUrl.startsWith("https://") &&
+    !saveUrl.startsWith("blob:")
+  ) {
     throw new ProtocolError("saveUrl must be HTTPS when provided");
   }
 
@@ -55,14 +71,17 @@ export function parseFragment(hash = window.location.hash): EditorConfig {
     saveUrl,
     displayName: params.get("displayName") ?? undefined,
     userId: params.get("userId") ?? undefined,
-    userDisplayName: params.get("userDisplayName") ?? undefined
+    userDisplayName: params.get("userDisplayName") ?? undefined,
   };
 }
 
 export function validateOrigin(origin: string): void {
   try {
     const parsed = new URL(origin);
-    if (parsed.origin !== origin || !["https:", "http:"].includes(parsed.protocol)) {
+    if (
+      parsed.origin !== origin ||
+      !["https:", "http:"].includes(parsed.protocol)
+    ) {
       throw new Error("invalid origin");
     }
   } catch {
@@ -88,7 +107,11 @@ export function createProtocolBridge(callbackOrigin: string) {
 
   return {
     emit(event: EditorToParentEvent): void {
-      window.parent.postMessage(event, callbackOrigin, event.type === "editor:saved" ? [event.encryptedBytes] : []);
+      window.parent.postMessage(
+        event,
+        callbackOrigin,
+        event.type === "editor:saved" ? [event.encryptedBytes] : [],
+      );
     },
     onMessage(listener: (event: ParentToEditorEvent) => void): () => void {
       listeners.add(listener);
@@ -97,7 +120,7 @@ export function createProtocolBridge(callbackOrigin: string) {
     destroy(): void {
       window.removeEventListener("message", onMessage);
       listeners.clear();
-    }
+    },
   };
 }
 
@@ -106,6 +129,11 @@ function isParentEvent(value: unknown): value is ParentToEditorEvent {
     return false;
   }
   const type = (value as { type: string }).type;
+  if (type === "parent:export-request") {
+    return SUPPORTED_FILE_TYPES.includes(
+      (value as { format?: FileType }).format as FileType,
+    );
+  }
   return (
     type === "parent:save-request" ||
     type === "parent:exit-request" ||
@@ -113,4 +141,3 @@ function isParentEvent(value: unknown): value is ParentToEditorEvent {
     type === "parent:set-display-name"
   );
 }
-

@@ -3,7 +3,7 @@ import { ChainPadClient } from "./chainpad-client";
 import { EditorRuntime } from "./editor-loader";
 import { createProtocolBridge, parseFragment, ProtocolError } from "./protocol";
 import { EditorUi } from "./ui";
-import type { EditorErrorCode } from "./types";
+import type { EditorErrorCode, SaveResult } from "./types";
 
 const VERSION = "0.1.0";
 
@@ -37,12 +37,20 @@ async function boot(): Promise<void> {
       ui.setStatus(message);
       ui.showLoading(message);
     });
-    const chainpad = new ChainPadClient(config, activeBridge.emit, (patch) => runtime.getAdapter().applyRemotePatch(patch));
-    runtime.getAdapter().onLocalPatch((patch) => chainpad.sendPatch(patch));
+    const chainpad = new ChainPadClient(config, activeBridge.emit, (patch) =>
+      runtime.getAdapter().applyRemotePatch(patch),
+    );
+    runtime.getAdapter().onLocalPatch((patch) => {
+      runtime.recordLocalPatch(patch);
+      void chainpad.sendPatch(patch);
+    });
 
     activeBridge.onMessage((event) => {
       if (event.type === "parent:save-request") {
         void save(runtime, activeBridge, Boolean(config.saveUrl));
+      }
+      if (event.type === "parent:export-request") {
+        void exportOoxml(runtime, activeBridge, event.format);
       }
       if (event.type === "parent:exit-request") {
         activeBridge.emit({ type: "editor:exit" });
@@ -68,32 +76,77 @@ async function boot(): Promise<void> {
     ui.setStatus("Ready");
     ui.hideOverlay();
   } catch (error) {
-    const code: EditorErrorCode = error instanceof ProtocolError ? "invalid-config" : "editor-load-failed";
+    const code: EditorErrorCode =
+      error instanceof ProtocolError ? "invalid-config" : "editor-load-failed";
     const message = error instanceof Error ? error.message : "Unknown error";
     bridge?.emit({ type: "editor:error", code, message });
-    ui.showError(code, message, () => location.reload(), () => bridge?.emit({ type: "editor:exit" }));
+    ui.showError(
+      code,
+      message,
+      () => location.reload(),
+      () => bridge?.emit({ type: "editor:exit" }),
+    );
   }
 }
 
 async function save(
   runtime: EditorRuntime,
   bridge: ReturnType<typeof createProtocolBridge>,
-  hasUploadTarget: boolean
+  hasUploadTarget: boolean,
 ): Promise<void> {
   try {
     ui.setStatus("Saving...");
     bridge.emit({ type: "editor:saving" });
-    const encryptedBytes = await runtime.save();
+    const result = await runtime.save();
     if (hasUploadTarget) {
       bridge.emit({ type: "editor:save-uploaded" });
     }
-    bridge.emit({ type: "editor:saved", encryptedBytes, contentType: "application/octet-stream" });
+    emitSaved(bridge, result);
     ui.setStatus("Saved");
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown save error";
+    const message =
+      error instanceof Error ? error.message : "Unknown save error";
     bridge.emit({ type: "editor:error", code: "save-upload-failed", message });
-    ui.showError("save-upload-failed", message, () => void save(runtime, bridge, hasUploadTarget), () =>
-      bridge.emit({ type: "editor:exit" })
+    ui.showError(
+      "save-upload-failed",
+      message,
+      () => void save(runtime, bridge, hasUploadTarget),
+      () => bridge.emit({ type: "editor:exit" }),
+    );
+  }
+}
+
+function emitSaved(
+  bridge: ReturnType<typeof createProtocolBridge>,
+  result: SaveResult,
+): void {
+  bridge.emit({
+    type: "editor:saved",
+    encryptedBytes: result.encryptedBytes,
+    contentType: result.contentType,
+    documentFormat: result.documentFormat,
+  });
+}
+
+async function exportOoxml(
+  runtime: EditorRuntime,
+  bridge: ReturnType<typeof createProtocolBridge>,
+  format: "docx" | "xlsx" | "pptx",
+): Promise<void> {
+  try {
+    ui.setStatus("Exporting...");
+    bridge.emit({ type: "editor:saving" });
+    emitSaved(bridge, await runtime.exportOoxml(format));
+    ui.setStatus("Exported");
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown export error";
+    bridge.emit({ type: "editor:error", code: "conversion-failed", message });
+    ui.showError(
+      "conversion-failed",
+      message,
+      () => void exportOoxml(runtime, bridge, format),
+      () => bridge.emit({ type: "editor:exit" }),
     );
   }
 }

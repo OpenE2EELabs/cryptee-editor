@@ -17,7 +17,7 @@
 
 ## Cryptography
 
-Files use AES-256-GCM with a fresh 12-byte nonce per encryption. The serialized format is `nonce || ciphertext || tag`. Collaboration derives a session key from `fileKey` and `sessionId` using HKDF-SHA-256 and encrypts patches before relay transport.
+Files use AES-256-GCM with a fresh 12-byte nonce per encryption. The serialized format is `nonce || ciphertext || tag`. After first import, the encrypted plaintext should be a `cryptee-office-session-v1` checkpoint rather than the original OOXML file. Collaboration derives a session key from `fileKey` and `sessionId` using HKDF-SHA-256 and encrypts ONLYOFFICE change patches before relay transport.
 
 ## Recommendations For Integrators
 
@@ -30,4 +30,3 @@ Files use AES-256-GCM with a fresh 12-byte nonce per encryption. The serialized 
 ## Vulnerability Disclosure
 
 Report security issues privately through GitHub security advisories when enabled. Until a public contact is configured, do not file public issues for suspected vulnerabilities.
-

@@ -21,7 +21,11 @@ sequenceDiagram
   Editor->>Store: GET encrypted bytes
   Store-->>Editor: nonce || ciphertext || tag
   Editor->>Editor: AES-256-GCM decrypt
-  Editor->>Editor: x2t conversion
+  alt encrypted Office session
+    Editor->>Editor: open Editor.bin checkpoint directly
+  else first OOXML import
+    Editor->>Editor: x2t conversion to Editor.bin
+  end
   Editor-->>App: editor:document-loaded
 ```
 
@@ -32,15 +36,21 @@ sequenceDiagram
   participant App as Parent app
   participant Editor as cryptee-editor
   participant Store as HTTPS storage
-  Editor->>Editor: export from editor
-  Editor->>Editor: x2t conversion
-  Editor->>Editor: AES-256-GCM encrypt
+  Editor->>Editor: checkpoint Editor.bin and change log
+  Editor->>Editor: serialize cryptee-office-session-v1
+  Editor->>Editor: AES-256-GCM encrypt session
   alt saveUrl provided
     Editor->>Store: PUT encrypted bytes
     Editor-->>App: editor:save-uploaded
   end
   Editor-->>App: editor:saved
 ```
+
+`parent:save-request` saves the internal editing session. Standard DOCX/XLSX/PPTX export is a separate `parent:export-request` flow so active editing does not depend on repeated OOXML conversion.
+
+## Internal Session Format
+
+The active editing format is `cryptee-office-session-v1`: a JSON container that stores the ONLYOFFICE `Editor.bin` checkpoint, media map, and encrypted collaboration change history before the whole container is encrypted for storage. First open imports OOXML once. Later opens use the internal checkpoint directly.
 
 ## Collaboration Flow
 
@@ -79,4 +89,3 @@ ONLYOFFICE and x2t are large browser workloads. Expect hundreds of megabytes of 
 - https://github.com/cryptpad/onlyoffice-editor
 - https://github.com/cryptpad/chainpad
 - https://github.com/cryptpad/cryptpad
-

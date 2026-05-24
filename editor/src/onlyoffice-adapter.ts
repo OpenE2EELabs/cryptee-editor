@@ -3,7 +3,10 @@ import type { EditorAdapter, EditorMode, FileType } from "./types";
 declare global {
   interface Window {
     DocsAPI?: {
-      DocEditor: new (placeholderId: string, config: unknown) => CryptPadDocEditor;
+      DocEditor: new (
+        placeholderId: string,
+        config: unknown,
+      ) => CryptPadDocEditor;
     };
     APP?: Record<string, unknown>;
   }
@@ -47,7 +50,8 @@ interface AdapterOptions {
   userDisplayName?: string;
 }
 
-const ONLYOFFICE_API_URL = "./vendor/onlyoffice-editor/web-apps/apps/api/documents/api.js";
+const ONLYOFFICE_API_URL =
+  "./vendor/onlyoffice-editor/web-apps/apps/api/documents/api.js";
 
 let apiPromise: Promise<void> | undefined;
 
@@ -62,17 +66,24 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
 
   constructor(private readonly options: AdapterOptions) {}
 
-  async mount(container: HTMLElement, documentBytes: ArrayBuffer): Promise<void> {
+  async mount(
+    container: HTMLElement,
+    documentBytes: ArrayBuffer,
+  ): Promise<void> {
     await loadOnlyOfficeApi();
     this.currentBin = documentBytes.slice(0);
     this.placeholderId = `oo-${crypto.randomUUID()}`;
-    this.blobUrl = URL.createObjectURL(new Blob([this.currentBin], { type: "application/octet-stream" }));
+    this.blobUrl = URL.createObjectURL(
+      new Blob([this.currentBin], { type: "application/octet-stream" }),
+    );
 
     container.innerHTML = `<div id="${this.placeholderId}" class="onlyoffice-host"></div>`;
 
     const EditorCtor = window.DocsAPI?.DocEditor;
     if (!EditorCtor) {
-      throw new Error("CryptPad ONLYOFFICE API loaded without DocsAPI.DocEditor");
+      throw new Error(
+        "CryptPad ONLYOFFICE API loaded without DocsAPI.DocEditor",
+      );
     }
 
     this.editor = new EditorCtor(this.placeholderId, this.buildConfig());
@@ -95,8 +106,11 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
     this.options.title = name;
   }
 
-  applyRemotePatch(): void {
-    // ChainPad patch application is intentionally separate from the first single-user editor bridge.
+  applyRemotePatch(patch: ArrayBuffer): void {
+    const message = decodePatchMessage(patch);
+    if (message) {
+      this.editor?.sendMessageToOO?.(message);
+    }
   }
 
   onLocalPatch(handler: (patch: ArrayBuffer) => void): void {
@@ -127,25 +141,26 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
           edit: this.options.mode === "edit",
           download: false,
           print: false,
-          review: this.options.mode === "edit"
-        }
+          review: this.options.mode === "edit",
+        },
       },
       editorConfig: {
         lang: "en",
         mode: this.options.mode,
         user: {
           id: this.options.userId ?? "anonymous",
-          name: this.options.userDisplayName ?? "Anonymous"
+          name: this.options.userDisplayName ?? "Anonymous",
         },
         customization: {
           autosave: false,
           compactHeader: true,
-          forcesave: true
-        }
+          forcesave: true,
+        },
       },
       events: {
-        onRequestSaveAs: () => this.saveHandlers.forEach((handler) => handler())
-      }
+        onRequestSaveAs: () =>
+          this.saveHandlers.forEach((handler) => handler()),
+      },
     };
   }
 
@@ -163,16 +178,16 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
             indexUser: 1,
             connectionId: participantId,
             isCloseCoAuthoring: false,
-            view: this.options.mode === "view"
-          }
-        ]
+            view: this.options.mode === "view",
+          },
+        ],
       }),
       getImageURL: async () => "",
       onAuth: () => undefined,
       onMessage: (message: unknown) => this.handleOnlyOfficeMessage(message),
       onCorruptionWarning: (duplicateId: string) => {
         console.warn("ONLYOFFICE duplicate document object id", duplicateId);
-      }
+      },
     };
   }
 
@@ -196,14 +211,14 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
       const patchBytes = new TextEncoder().encode(JSON.stringify(msg));
       const patch = patchBytes.buffer.slice(
         patchBytes.byteOffset,
-        patchBytes.byteOffset + patchBytes.byteLength
+        patchBytes.byteOffset + patchBytes.byteLength,
       ) as ArrayBuffer;
       this.localPatchHandlers.forEach((handler) => handler(patch));
       if (msg.type === "saveChanges") {
         this.editor?.sendMessageToOO?.({
           type: "unSaveLock",
           index: this.changesIndex++,
-          time: Date.now()
+          time: Date.now(),
         });
       }
       return;
@@ -213,7 +228,7 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
       this.editor?.sendMessageToOO?.({
         type: "unSaveLock",
         index: this.changesIndex,
-        time: Date.now()
+        time: Date.now(),
       });
     }
   }
@@ -231,15 +246,27 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
   }
 }
 
+function decodePatchMessage(patch: ArrayBuffer): unknown | undefined {
+  try {
+    return JSON.parse(new TextDecoder().decode(patch));
+  } catch {
+    return undefined;
+  }
+}
+
 function normalizeNativeBytes(bytes: unknown): ArrayBuffer | undefined {
   if (bytes instanceof ArrayBuffer) {
     return bytes.slice(0);
   }
   if (ArrayBuffer.isView(bytes)) {
-    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    return bytes.buffer.slice(
+      bytes.byteOffset,
+      bytes.byteOffset + bytes.byteLength,
+    ) as ArrayBuffer;
   }
   if (typeof bytes === "string") {
-    return new Uint8Array([...bytes].map((char) => char.charCodeAt(0) & 0xff)).buffer;
+    return new Uint8Array([...bytes].map((char) => char.charCodeAt(0) & 0xff))
+      .buffer;
   }
   return undefined;
 }
@@ -255,7 +282,8 @@ async function loadOnlyOfficeApi(): Promise<void> {
     script.src = ONLYOFFICE_API_URL;
     script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Failed to load CryptPad ONLYOFFICE API"));
+    script.onerror = () =>
+      reject(new Error("Failed to load CryptPad ONLYOFFICE API"));
     document.head.append(script);
   });
 
