@@ -10,6 +10,7 @@ export default [
       globals: {
         ArrayBuffer: "readonly",
         Blob: "readonly",
+        Buffer: "readonly",
         CryptoKey: "readonly",
         Event: "readonly",
         HTMLElement: "readonly",

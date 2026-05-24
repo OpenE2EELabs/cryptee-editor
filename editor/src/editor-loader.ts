@@ -1,10 +1,18 @@
 import { decryptFile, encryptFile } from "./crypto";
-import type { EditorAdapter, EditorConfig } from "./types";
+import { CryptPadOnlyOfficeAdapter } from "./onlyoffice-adapter";
+import type { EditorAdapter, EditorConfig, FileType } from "./types";
+import { convertBinToOoxml, convertOoxmlToBin } from "./x2t-converter";
 
 export class EditorRuntime {
   constructor(
     private readonly config: EditorConfig,
-    private readonly adapter: EditorAdapter = new PlaceholderOnlyOfficeAdapter()
+    private readonly adapter: EditorAdapter = new CryptPadOnlyOfficeAdapter({
+      fileType: config.fileType,
+      mode: config.mode,
+      title: config.displayName ?? "Untitled",
+      userId: config.userId,
+      userDisplayName: config.userDisplayName
+    })
   ) {}
 
   async load(container: HTMLElement): Promise<void> {
@@ -48,14 +56,12 @@ export class EditorRuntime {
 
 async function convertOoxmlToInternal(bytes: ArrayBuffer, fileType: string): Promise<ArrayBuffer> {
   await ensureVendorPresent("x2t");
-  void fileType;
-  return bytes;
+  return convertOoxmlToBin(bytes, fileType as FileType);
 }
 
 async function convertInternalToOoxml(bytes: ArrayBuffer, fileType: string): Promise<ArrayBuffer> {
   await ensureVendorPresent("x2t");
-  void fileType;
-  return bytes;
+  return convertBinToOoxml(bytes, fileType as FileType);
 }
 
 async function ensureVendorPresent(name: "x2t" | "onlyoffice-editor"): Promise<void> {
@@ -66,43 +72,5 @@ async function ensureVendorPresent(name: "x2t" | "onlyoffice-editor"): Promise<v
   const response = await fetch(probe, { method: "HEAD" });
   if (!response.ok) {
     throw new Error(`Missing vendor artifact ${name}; run scripts/fetch-vendor.sh`);
-  }
-}
-
-class PlaceholderOnlyOfficeAdapter implements EditorAdapter {
-  private bytes = new ArrayBuffer(0);
-  private saveHandler: (() => void) | undefined;
-
-  async mount(container: HTMLElement, documentBytes: ArrayBuffer): Promise<void> {
-    await ensureVendorPresent("onlyoffice-editor");
-    this.bytes = documentBytes.slice(0);
-    container.innerHTML = `
-      <div class="placeholder-editor" contenteditable="true" role="textbox" aria-label="Document editor">
-        <p>ONLYOFFICE vendor assets are present. The upstream adapter boundary is ready for the CryptPad editor runtime.</p>
-      </div>
-    `;
-  }
-
-  async exportDocument(): Promise<ArrayBuffer> {
-    return this.bytes.slice(0);
-  }
-
-  setMode(mode: "edit" | "view"): void {
-    const editable = mode === "edit";
-    document.querySelector(".placeholder-editor")?.setAttribute("contenteditable", String(editable));
-  }
-
-  setDisplayName(): void {}
-
-  applyRemotePatch(): void {}
-
-  onLocalPatch(): void {}
-
-  onSaveRequest(handler: () => void): void {
-    this.saveHandler = handler;
-  }
-
-  requestSave(): void {
-    this.saveHandler?.();
   }
 }
