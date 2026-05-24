@@ -8,6 +8,7 @@ export default defineConfig({
     sourcemap: true
   },
   test: {
-    environment: "node"
+    environment: "node",
+    exclude: ["tests/browser/**"]
   }
 });
