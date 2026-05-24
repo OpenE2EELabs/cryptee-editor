@@ -51,6 +51,20 @@ export class EditorUi {
     this.overlay.innerHTML = `<div class="dialog"><p>${escapeHtml(message)}</p></div>`;
   }
 
+  showWelcome(): void {
+    this.overlay.hidden = false;
+    this.overlay.innerHTML = `
+      <div class="dialog welcome">
+        <h1>cryptee-editor is ready</h1>
+        <p>Open this editor from an integrating application with a protocol URL fragment containing an encrypted file URL, file key, file type, and callback origin.</p>
+        <div class="actions">
+          <a class="button" href="https://github.com/OpenE2EELabs/cryptee-editor/blob/main/docs/PROTOCOL.md" target="_blank" rel="noopener">Protocol</a>
+          <a class="button secondary" href="https://github.com/OpenE2EELabs/cryptee-editor/tree/main/examples" target="_blank" rel="noopener">Examples</a>
+        </div>
+      </div>
+    `;
+  }
+
   hideOverlay(): void {
     this.overlay.hidden = true;
     this.overlay.innerHTML = "";
@@ -94,4 +108,3 @@ function escapeHtml(value: string): string {
     return entities[char];
   });
 }
-

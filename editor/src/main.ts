@@ -20,6 +20,12 @@ async function boot(): Promise<void> {
   let bridge: ReturnType<typeof createProtocolBridge> | undefined;
   try {
     ui.showLoading("Loading editor...");
+    if (!window.location.hash || window.location.hash === "#") {
+      ui.setDisplayName("cryptee-editor");
+      ui.setStatus("Ready");
+      ui.showWelcome();
+      return;
+    }
     const config = parseFragment();
     ui.setDisplayName(config.displayName);
     ui.setMode(config.mode);
