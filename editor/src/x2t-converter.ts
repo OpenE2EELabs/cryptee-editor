@@ -19,7 +19,9 @@ type X2tModule = {
   locateFile?: (path: string, prefix: string) => string;
   noExitRuntime?: boolean;
   noInitialRun?: boolean;
+  onAbort?: (reason: unknown) => void;
   onRuntimeInitialized?: () => void;
+  printErr?: (text: unknown) => void;
 };
 
 declare global {
@@ -32,6 +34,7 @@ const X2T_BASE_URL = "./vendor/x2t/";
 const WORKING_DIR = "/working";
 
 let modulePromise: Promise<X2tModule> | undefined;
+let lastRuntimeError = "";
 
 export async function convertOoxmlToBin(bytes: ArrayBuffer, fileType: FileType): Promise<ArrayBuffer> {
   return convertWithX2t(bytes, `input.${fileType}`, "output.bin");
@@ -66,6 +69,9 @@ async function loadX2t(): Promise<X2tModule> {
     window.Module = {
       noInitialRun: true,
       noExitRuntime: true,
+      onAbort(reason: unknown) {
+        reject(new Error(`x2t runtime aborted: ${String(reason)}`));
+      },
       locateFile(path: string) {
         return `${X2T_BASE_URL}${path}`;
       },
@@ -75,13 +81,17 @@ async function loadX2t(): Promise<X2tModule> {
         } else {
           reject(new Error("x2t runtime initialized without expected exports"));
         }
+      },
+      printErr(text: unknown) {
+        lastRuntimeError = String(text);
+        console.warn("x2t:", text);
       }
     } as unknown as X2tModule;
 
     const script = document.createElement("script");
     script.src = `${X2T_BASE_URL}x2t.js`;
     script.async = true;
-    script.onerror = () => reject(new Error("Failed to load x2t.js"));
+    script.onerror = () => reject(new Error(`Failed to load x2t.js${lastRuntimeError ? `: ${lastRuntimeError}` : ""}`));
     document.head.append(script);
   });
 

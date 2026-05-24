@@ -40,14 +40,14 @@ export class EditorRuntime {
     this.report(`Converting ${this.config.fileType.toUpperCase()} to ONLYOFFICE format...`);
     const internalBytes = await withTimeout(
       convertOoxmlToInternal(plaintext, this.config.fileType),
-      120_000,
-      `Timed out while converting ${this.config.fileType.toUpperCase()}`
+      600_000,
+      `Timed out while converting ${this.config.fileType.toUpperCase()}; this can happen with very large files or if x2t.wasm cannot initialize in the browser`
     );
 
     this.report("Starting ONLYOFFICE editor...");
     await withTimeout(
       this.adapter.mount(container, internalBytes),
-      120_000,
+      300_000,
       "Timed out while starting ONLYOFFICE editor"
     );
 
