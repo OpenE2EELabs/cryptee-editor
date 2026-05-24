@@ -41,7 +41,7 @@ export async function encryptFile(plaintext: ArrayBuffer, keyBase64: string): Pr
 export async function deriveSessionKey(sessionId: string, fileKey: string): Promise<CryptoKey> {
   const inputKeyMaterial = await crypto.subtle.importKey(
     "raw",
-    base64ToBytes(fileKey),
+    toArrayBuffer(base64ToBytes(fileKey)),
     "HKDF",
     false,
     ["deriveKey"]
@@ -65,6 +65,9 @@ export async function importAesKey(keyBase64: string): Promise<CryptoKey> {
   if (keyBytes.byteLength !== AES_KEY_BYTES) {
     throw new Error("fileKey must decode to 32 bytes");
   }
-  return crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt", "decrypt"]);
+  return crypto.subtle.importKey("raw", toArrayBuffer(keyBytes), "AES-GCM", false, ["encrypt", "decrypt"]);
 }
 
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}

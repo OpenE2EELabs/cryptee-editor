@@ -24,18 +24,19 @@ async function boot(): Promise<void> {
     ui.setDisplayName(config.displayName);
     ui.setMode(config.mode);
     bridge = createProtocolBridge(config.callbackOrigin);
-    bridge.emit({ type: "editor:ready", version: VERSION });
+    const activeBridge = bridge;
+    activeBridge.emit({ type: "editor:ready", version: VERSION });
 
     const runtime = new EditorRuntime(config);
-    const chainpad = new ChainPadClient(config, bridge.emit, (patch) => runtime.getAdapter().applyRemotePatch(patch));
+    const chainpad = new ChainPadClient(config, activeBridge.emit, (patch) => runtime.getAdapter().applyRemotePatch(patch));
     runtime.getAdapter().onLocalPatch((patch) => chainpad.sendPatch(patch));
 
-    bridge.onMessage((event) => {
+    activeBridge.onMessage((event) => {
       if (event.type === "parent:save-request") {
-        void save(runtime, bridge, Boolean(config.saveUrl));
+        void save(runtime, activeBridge, Boolean(config.saveUrl));
       }
       if (event.type === "parent:exit-request") {
-        bridge?.emit({ type: "editor:exit" });
+        activeBridge.emit({ type: "editor:exit" });
       }
       if (event.type === "parent:update-permissions") {
         runtime.getAdapter().setMode(event.mode);
@@ -49,7 +50,7 @@ async function boot(): Promise<void> {
 
     ui.setStatus("Decrypting...");
     await runtime.load(ui.editorContainer());
-    bridge.emit({ type: "editor:document-loaded" });
+    activeBridge.emit({ type: "editor:document-loaded" });
 
     if (config.sessionId) {
       ui.setStatus("Connecting to collaboration...");
@@ -88,4 +89,3 @@ async function save(
     );
   }
 }
-
