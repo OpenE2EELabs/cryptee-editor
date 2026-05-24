@@ -29,6 +29,8 @@ jobs:
       - working-directory: editor
         run: npm install
       - run: ./scripts/fetch-vendor.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
       - working-directory: editor
         run: npm run build
       - uses: actions/configure-pages@v5
@@ -37,4 +39,3 @@ jobs:
           path: editor/dist
       - id: deployment
         uses: actions/deploy-pages@v4
-

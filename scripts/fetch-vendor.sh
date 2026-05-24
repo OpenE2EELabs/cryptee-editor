@@ -52,7 +52,7 @@ download_asset() {
 release_info() {
     local repo="$1"
     local api="https://api.github.com/repos/$repo/releases/latest"
-    curl -fsSL "$api" | node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{const r=JSON.parse(s);console.log(`${r.tag_name} ${r.target_commitish} ${r.html_url}`);})"
+    curl -fsSL "$api" | node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{const r=JSON.parse(s);console.log(r.tag_name + ' ' + r.target_commitish + ' ' + r.html_url);})"
 }
 
 verify_sha512_if_available() {
