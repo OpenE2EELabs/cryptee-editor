@@ -1,0 +1,22 @@
+cryptee-editor
+Copyright (C) 2026 OpenE2EELabs contributors
+
+cryptee-editor is licensed under AGPL-3.0-or-later.
+
+This project is built on and interoperates with the following AGPL-3.0
+upstream projects and components:
+
+- CryptPad and the CryptPad team: https://cryptpad.org
+- CryptPad onlyoffice-x2t-wasm: https://github.com/cryptpad/onlyoffice-x2t-wasm
+- CryptPad onlyoffice-editor: https://github.com/cryptpad/onlyoffice-editor
+- CryptPad ChainPad: https://github.com/cryptpad/chainpad
+- CryptPad ChainPad server: https://github.com/cryptpad/chainpad-server
+- CryptPad ChainPad Netflux: https://github.com/cryptpad/chainpad-netflux
+- CryptPad main project, used for architectural reference only:
+  https://github.com/cryptpad/cryptpad
+- ONLYOFFICE, upstream of x2t and the editor:
+  https://www.onlyoffice.com
+
+Prebuilt upstream artifacts are downloaded at build time by
+scripts/fetch-vendor.sh and are not redistributed in this repository.
+

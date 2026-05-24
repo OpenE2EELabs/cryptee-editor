@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Basic cryptee-editor integration</title>
+    <style>
+      body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 20px; }
+      iframe { border: 1px solid #ccd6d3; height: 70vh; width: 100%; }
+      .row { display: flex; gap: 12px; margin: 16px 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Basic HTML integration</h1>
+    <input id="file" type="file" accept=".docx,.xlsx,.pptx" />
+    <div class="row">
+      <button id="open" type="button">Open in iframe</button>
+      <a id="download" hidden download="encrypted-result.bin">Download encrypted result</a>
+    </div>
+    <iframe id="editor" title="cryptee-editor"></iframe>
+    <script>
+      const editorBaseUrl = "../../editor/dist/index.html";
+      const fileInput = document.querySelector("#file");
+      const iframe = document.querySelector("#editor");
+      const download = document.querySelector("#download");
+
+      document.querySelector("#open").addEventListener("click", async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return alert("Choose a DOCX, XLSX, or PPTX file first.");
+        const key = crypto.getRandomValues(new Uint8Array(32));
+        const encrypted = await encrypt(await file.arrayBuffer(), key);
+        const blobUrl = URL.createObjectURL(new Blob([encrypted], { type: "application/octet-stream" }));
+        const type = file.name.split(".").pop().toLowerCase();
+        const url = new URL(editorBaseUrl, location.href);
+        url.hash = new URLSearchParams({
+          fileUrl: blobUrl,
+          fileKey: bytesToBase64(key),
+          fileType: type,
+          callbackOrigin: location.origin,
+          displayName: file.name
+        }).toString();
+        iframe.src = url.toString();
+      });
+
+      window.addEventListener("message", (event) => {
+        if (event.origin !== location.origin) return;
+        if (event.data?.type === "editor:saved") {
+          const blob = new Blob([event.data.encryptedBytes], { type: "application/octet-stream" });
+          download.href = URL.createObjectURL(blob);
+          download.hidden = false;
+          download.textContent = "Download encrypted result";
+        }
+      });
+
+      async function encrypt(bytes, rawKey) {
+        const nonce = crypto.getRandomValues(new Uint8Array(12));
+        const key = await crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["encrypt"]);
+        const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, key, bytes));
+        const out = new Uint8Array(nonce.length + ciphertext.length);
+        out.set(nonce);
+        out.set(ciphertext, nonce.length);
+        return out;
+      }
+
+      function bytesToBase64(bytes) {
+        return btoa(String.fromCharCode(...bytes));
+      }
+    </script>
+  </body>
+</html>
+

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AcmePortal demo</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <aside>
+        <strong>AcmePortal</strong>
+        <label>Role <select id="role"><option>admin</option><option>editor</option><option>viewer</option></select></label>
+        <button id="open">Open policy.docx</button>
+        <button id="view">Set view-only</button>
+        <button id="edit">Set editable</button>
+      </aside>
+      <iframe id="editor" title="cryptee-editor"></iframe>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>
+

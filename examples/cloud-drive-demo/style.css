@@ -1,0 +1,6 @@
+body { background: #eef5f2; color: #172026; font: 15px system-ui, sans-serif; margin: 0; }
+main { display: grid; gap: 16px; padding: 20px; }
+header { align-items: baseline; display: flex; gap: 12px; }
+article { align-items: center; background: white; border: 1px solid #cbd8d3; display: flex; justify-content: space-between; padding: 12px; }
+iframe { border: 1px solid #cbd8d3; height: 64vh; width: 100%; }
+
