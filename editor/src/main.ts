@@ -33,7 +33,10 @@ async function boot(): Promise<void> {
     const activeBridge = bridge;
     activeBridge.emit({ type: "editor:ready", version: VERSION });
 
-    const runtime = new EditorRuntime(config);
+    const runtime = new EditorRuntime(config, undefined, (message) => {
+      ui.setStatus(message);
+      ui.showLoading(message);
+    });
     const chainpad = new ChainPadClient(config, activeBridge.emit, (patch) => runtime.getAdapter().applyRemotePatch(patch));
     runtime.getAdapter().onLocalPatch((patch) => chainpad.sendPatch(patch));
 
@@ -54,7 +57,6 @@ async function boot(): Promise<void> {
       }
     });
 
-    ui.setStatus("Decrypting...");
     await runtime.load(ui.editorContainer());
     activeBridge.emit({ type: "editor:document-loaded" });
 

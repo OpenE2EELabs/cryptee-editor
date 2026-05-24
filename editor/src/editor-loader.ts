@@ -12,22 +12,50 @@ export class EditorRuntime {
       title: config.displayName ?? "Untitled",
       userId: config.userId,
       userDisplayName: config.userDisplayName
-    })
+    }),
+    private readonly onStatus: (message: string) => void = () => undefined
   ) {}
 
   async load(container: HTMLElement): Promise<void> {
-    const response = await fetch(this.config.fileUrl);
+    this.report("Fetching encrypted file...");
+    const response = await withTimeout(
+      fetch(this.config.fileUrl),
+      60_000,
+      "Timed out while fetching encrypted file"
+    );
     if (!response.ok) {
       throw new Error(`Fetch failed with status ${response.status}`);
     }
+
+    this.report("Reading encrypted bytes...");
     const encrypted = await response.arrayBuffer();
-    const plaintext = await decryptFile(encrypted, this.config.fileKey);
-    const internalBytes = await convertOoxmlToInternal(plaintext, this.config.fileType);
-    await this.adapter.mount(container, internalBytes);
+
+    this.report("Decrypting file...");
+    const plaintext = await withTimeout(
+      decryptFile(encrypted, this.config.fileKey),
+      30_000,
+      "Timed out while decrypting file"
+    );
+
+    this.report(`Converting ${this.config.fileType.toUpperCase()} to ONLYOFFICE format...`);
+    const internalBytes = await withTimeout(
+      convertOoxmlToInternal(plaintext, this.config.fileType),
+      120_000,
+      `Timed out while converting ${this.config.fileType.toUpperCase()}`
+    );
+
+    this.report("Starting ONLYOFFICE editor...");
+    await withTimeout(
+      this.adapter.mount(container, internalBytes),
+      120_000,
+      "Timed out while starting ONLYOFFICE editor"
+    );
+
     this.adapter.setMode(this.config.mode);
     if (this.config.displayName) {
       this.adapter.setDisplayName(this.config.displayName);
     }
+    this.report("Editor ready");
   }
 
   async save(): Promise<ArrayBuffer> {
@@ -52,6 +80,10 @@ export class EditorRuntime {
   getAdapter(): EditorAdapter {
     return this.adapter;
   }
+
+  private report(message: string): void {
+    this.onStatus(message);
+  }
 }
 
 async function convertOoxmlToInternal(bytes: ArrayBuffer, fileType: string): Promise<ArrayBuffer> {
@@ -73,4 +105,20 @@ async function ensureVendorPresent(name: "x2t" | "onlyoffice-editor"): Promise<v
   if (!response.ok) {
     throw new Error(`Missing vendor artifact ${name}; run scripts/fetch-vendor.sh`);
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        window.clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
 }

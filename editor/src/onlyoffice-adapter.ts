@@ -78,7 +78,7 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
     this.editor = new EditorCtor(this.placeholderId, this.buildConfig());
     window.APP = window.APP ?? {};
     this.editor.connectMockServer(this.createMockServer());
-    await this.editor.waitForAppReady;
+    await (this.editor.waitForAppReady ?? Promise.resolve());
   }
 
   async exportDocument(): Promise<ArrayBuffer> {
