@@ -62,6 +62,7 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
   private currentBin = new ArrayBuffer(0);
   private readonly localPatchHandlers = new Set<(patch: ArrayBuffer) => void>();
   private readonly saveHandlers = new Set<() => void>();
+  private resizeObserver: ResizeObserver | undefined;
   private blobUrl: string | undefined;
   private placeholderId = "";
   private changesIndex = 0;
@@ -91,7 +92,9 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
     this.editor = new EditorCtor(this.placeholderId, this.buildConfig());
     window.APP = window.APP ?? {};
     this.editor.connectMockServer(this.createMockServer());
+    this.fitEditorFrame();
     await (this.editor.waitForAppReady ?? Promise.resolve());
+    this.fitEditorFrame();
   }
 
   async exportDocument(): Promise<ArrayBuffer> {
@@ -128,6 +131,7 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
   }
 
   destroy(): void {
+    this.resizeObserver?.disconnect();
     this.editor?.destroyEditor();
     if (this.blobUrl) {
       URL.revokeObjectURL(this.blobUrl);
@@ -137,6 +141,8 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
   private buildConfig(): unknown {
     return {
       type: "desktop",
+      width: "100%",
+      height: "100%",
       documentType: documentTypeFor(this.options.fileType),
       document: {
         fileType: documentFileTypeFor(this.options.fileType),
@@ -249,6 +255,40 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
       | undefined;
     const bytes = frameWindow?.editor?.asc_nativeGetFile?.();
     return normalizeNativeBytes(bytes);
+  }
+
+  private fitEditorFrame(): void {
+    const host = document.getElementById(this.placeholderId);
+    const iframe = this.editor?.getIframe?.();
+    if (!host || !iframe) {
+      return;
+    }
+
+    host.style.width = "100%";
+    host.style.height = "100%";
+    iframe.style.width = "100%";
+    iframe.style.height = "100%";
+    iframe.setAttribute("width", "100%");
+    iframe.setAttribute("height", "100%");
+
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = new ResizeObserver(() => {
+      window.requestAnimationFrame(() => this.notifyResize());
+    });
+    this.resizeObserver.observe(host);
+    this.notifyResize();
+    window.setTimeout(() => this.notifyResize(), 250);
+  }
+
+  private notifyResize(): void {
+    window.dispatchEvent(new Event("resize"));
+    try {
+      this.editor
+        ?.getIframe?.()
+        .contentWindow?.dispatchEvent(new Event("resize"));
+    } catch {
+      // Some browsers can reject iframe access while ONLYOFFICE is still booting.
+    }
   }
 }
 
