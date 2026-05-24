@@ -27,9 +27,12 @@ a {
   align-items: center;
   background: #ffffff;
   border-bottom: 1px solid #d9e2df;
+  color: #172026;
   display: flex;
   gap: 16px;
   padding: 0 16px;
+  position: relative;
+  z-index: 2;
 }
 
 .title {
@@ -52,19 +55,26 @@ a {
 .licensebar {
   border-bottom: 0;
   border-top: 1px solid #d9e2df;
-  color: #48615b;
+  color: #243a35;
   font-size: 12px;
   justify-content: center;
 }
 
+.licensebar a,
+.topbar a {
+  color: #005f73;
+  font-weight: 600;
+}
+
 .overlay {
   align-items: center;
-  background: rgb(247 249 248 / 92%);
+  background: #f7f9f8;
   display: flex;
-  inset: 0;
+  inset: 48px 0 28px;
   justify-content: center;
   padding: 24px;
   position: fixed;
+  z-index: 1;
 }
 
 .overlay[hidden] {
