@@ -14,13 +14,21 @@ self.onmessage = async (event) => {
 
   try {
     const module = await loadX2t();
-    const bytes = convertWithX2t(module, request.bytes, request.inputName, request.outputName);
-    self.postMessage({ id: request.id, ok: true, bytes }, [bytes]);
+    const result = convertWithX2t(
+      module,
+      request.bytes,
+      request.inputName,
+      request.outputName,
+    );
+    self.postMessage(
+      { id: request.id, ok: true, bytes: result.bytes, media: result.media },
+      [result.bytes, ...result.media.map((asset) => asset.bytes)],
+    );
   } catch (error) {
     self.postMessage({
       id: request.id,
       ok: false,
-      message: error instanceof Error ? error.message : String(error)
+      message: error instanceof Error ? error.message : String(error),
     });
   }
 };
@@ -48,13 +56,15 @@ async function loadX2t() {
             x2t = self.Module;
             resolve(self.Module);
           } else {
-            reject(new Error("x2t runtime initialized without expected exports"));
+            reject(
+              new Error("x2t runtime initialized without expected exports"),
+            );
           }
         },
         printErr(text) {
           lastRuntimeError = String(text);
           console.warn("x2t:", text);
-        }
+        },
       };
 
       runX2tSource(source);
@@ -69,7 +79,9 @@ async function loadX2t() {
 function runX2tSource(source) {
   const patched = source.replace(
     /Module\.locateFile=function\(path,prefix\)\{return prefix\+path\+suffix\}/,
-    'Module.locateFile=function(path,prefix){return "' + X2T_BASE_URL + '"+path}'
+    'Module.locateFile=function(path,prefix){return "' +
+      X2T_BASE_URL +
+      '"+path}',
   );
   const run = new Function("Module", patched);
   run(self.Module);
@@ -78,20 +90,112 @@ function runX2tSource(source) {
 function convertWithX2t(module, bytes, inputName, outputName) {
   resetWorkDir(module);
   module.FS.writeFile(`${WORKING_DIR}/${inputName}`, new Uint8Array(bytes));
-  module.FS.writeFile(`${WORKING_DIR}/params.xml`, buildParamsXml(inputName, outputName));
+  module.FS.writeFile(
+    `${WORKING_DIR}/params.xml`,
+    buildParamsXml(inputName, outputName),
+  );
 
   lastRuntimeError = "";
-  const result = module.ccall("main1", "number", ["string"], [`${WORKING_DIR}/params.xml`]);
+  const result = module.ccall(
+    "main1",
+    "number",
+    ["string"],
+    [`${WORKING_DIR}/params.xml`],
+  );
   if (result !== 0) {
-    throw new Error(`x2t conversion failed with exit code ${result}${lastRuntimeError ? `: ${lastRuntimeError}` : ""}`);
+    throw new Error(
+      `x2t conversion failed with exit code ${result}${lastRuntimeError ? `: ${lastRuntimeError}` : ""}`,
+    );
   }
 
   try {
-    const output = module.FS.readFile(`${WORKING_DIR}/${outputName}`, { encoding: "binary" });
-    return output.buffer.slice(output.byteOffset, output.byteOffset + output.byteLength);
+    const output = module.FS.readFile(`${WORKING_DIR}/${outputName}`, {
+      encoding: "binary",
+    });
+    return {
+      bytes: output.buffer.slice(
+        output.byteOffset,
+        output.byteOffset + output.byteLength,
+      ),
+      media: collectMediaFiles(module, inputName, outputName),
+    };
   } catch (error) {
-    throw new Error(`x2t did not produce ${outputName}${lastRuntimeError ? `: ${lastRuntimeError}` : ""}`);
+    throw new Error(
+      `x2t did not produce ${outputName}${lastRuntimeError ? `: ${lastRuntimeError}` : ""}`,
+    );
   }
+}
+
+function collectMediaFiles(module, inputName, outputName) {
+  const excluded = new Set([
+    inputName,
+    outputName,
+    "params.xml",
+    "cryptee-vendor-ready.txt",
+  ]);
+  const media = [];
+  collectMediaFilesRecursive(module, WORKING_DIR, "", excluded, media);
+  return media;
+}
+
+function collectMediaFilesRecursive(
+  module,
+  absoluteDir,
+  relativeDir,
+  excluded,
+  media,
+) {
+  for (const entry of module.FS.readdir(absoluteDir)) {
+    if (entry === "." || entry === "..") {
+      continue;
+    }
+
+    const absolutePath = `${absoluteDir}/${entry}`;
+    const relativePath = relativeDir ? `${relativeDir}/${entry}` : entry;
+    const stat = module.FS.stat(absolutePath);
+    if (module.FS.isDir(stat.mode)) {
+      collectMediaFilesRecursive(
+        module,
+        absolutePath,
+        relativePath,
+        excluded,
+        media,
+      );
+      continue;
+    }
+
+    if (excluded.has(relativePath) || excluded.has(entry)) {
+      continue;
+    }
+
+    const mimeType = mimeTypeFor(entry);
+    if (!mimeType) {
+      continue;
+    }
+
+    const bytes = module.FS.readFile(absolutePath, { encoding: "binary" });
+    media.push({
+      name: relativePath,
+      bytes: bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength,
+      ),
+      mimeType,
+    });
+  }
+}
+
+function mimeTypeFor(name) {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".gif")) return "image/gif";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".svg")) return "image/svg+xml";
+  if (lower.endsWith(".bmp")) return "image/bmp";
+  if (lower.endsWith(".emf")) return "image/x-emf";
+  if (lower.endsWith(".wmf")) return "image/x-wmf";
+  return "";
 }
 
 function buildParamsXml(inputName, outputName) {
@@ -150,7 +254,7 @@ function escapeXml(value) {
       ">": "&gt;",
       "&": "&amp;",
       "'": "&apos;",
-      '"': "&quot;"
+      '"': "&quot;",
     };
     return entities[char];
   });

@@ -15,6 +15,7 @@ type WorkerResponse =
       id: string;
       ok: true;
       bytes: ArrayBuffer;
+      media: ConvertedMediaAsset[];
     }
   | {
       id: string;
@@ -22,21 +23,54 @@ type WorkerResponse =
       message: string;
     };
 
-export async function convertOoxmlToBin(bytes: ArrayBuffer, fileType: FileType): Promise<ArrayBuffer> {
+export interface ConvertedMediaAsset {
+  name: string;
+  bytes: ArrayBuffer;
+  mimeType: string;
+}
+
+export interface ConversionResult {
+  bytes: ArrayBuffer;
+  media: ConvertedMediaAsset[];
+}
+
+export async function convertOoxmlToBin(
+  bytes: ArrayBuffer,
+  fileType: FileType,
+): Promise<ArrayBuffer> {
+  return (await convertOoxmlToInternalDocument(bytes, fileType)).bytes;
+}
+
+export async function convertOoxmlToInternalDocument(
+  bytes: ArrayBuffer,
+  fileType: FileType,
+): Promise<ConversionResult> {
   return convertWithWorker(bytes, `input.${fileType}`, "output.bin");
 }
 
-export async function convertBinToOoxml(bytes: ArrayBuffer, fileType: FileType): Promise<ArrayBuffer> {
-  return convertWithWorker(bytes, "input.bin", `output.${fileType}`);
+export async function convertBinToOoxml(
+  bytes: ArrayBuffer,
+  fileType: FileType,
+): Promise<ArrayBuffer> {
+  return (await convertWithWorker(bytes, "input.bin", `output.${fileType}`))
+    .bytes;
 }
 
-function convertWithWorker(bytes: ArrayBuffer, inputName: string, outputName: string): Promise<ArrayBuffer> {
-  return new Promise<ArrayBuffer>((resolve, reject) => {
+function convertWithWorker(
+  bytes: ArrayBuffer,
+  inputName: string,
+  outputName: string,
+): Promise<ConversionResult> {
+  return new Promise<ConversionResult>((resolve, reject) => {
     const id = crypto.randomUUID();
     const worker = new Worker(WORKER_URL);
     const timeout = window.setTimeout(() => {
       worker.terminate();
-      reject(new Error("x2t conversion timed out; the converter worker was terminated"));
+      reject(
+        new Error(
+          "x2t conversion timed out; the converter worker was terminated",
+        ),
+      );
     }, CONVERSION_TIMEOUT_MS);
 
     const cleanup = () => {
@@ -57,7 +91,7 @@ function convertWithWorker(bytes: ArrayBuffer, inputName: string, outputName: st
 
       cleanup();
       if (response.ok) {
-        resolve(response.bytes);
+        resolve({ bytes: response.bytes, media: response.media ?? [] });
       } else {
         reject(new Error(response.message));
       }
@@ -67,7 +101,7 @@ function convertWithWorker(bytes: ArrayBuffer, inputName: string, outputName: st
       id,
       inputName,
       outputName,
-      bytes: bytes.slice(0)
+      bytes: bytes.slice(0),
     };
     worker.postMessage(request, [request.bytes]);
   });

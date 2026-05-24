@@ -8,7 +8,13 @@ declare global {
         config: unknown,
       ) => CryptPadDocEditor;
     };
-    APP?: Record<string, unknown>;
+    APP?: Record<string, unknown> & {
+      AddImage?: (
+        callback: (result: { url: string }) => void,
+        errorCallback?: (error?: unknown) => void,
+      ) => void;
+      getImageURL?: (name: string, callback: (url: string) => void) => void;
+    };
   }
 }
 
@@ -20,6 +26,7 @@ type CryptPadDocEditor = {
   sendMessageToOO?: (message: unknown) => void;
   waitForAppReady?: Promise<void>;
   processRightsChange?: (enabled: boolean) => void;
+  insertImage?: (...args: unknown[]) => unknown;
 };
 
 export type OnlyOfficeDocumentFileType = FileType;
@@ -50,10 +57,14 @@ interface AdapterOptions {
   title: string;
   userId?: string;
   userDisplayName?: string;
+  getMedia?: () => Record<string, string>;
+  onMediaChange?: (media: Record<string, string>) => void;
 }
 
 const ONLYOFFICE_API_URL =
   "./vendor/onlyoffice-editor/web-apps/apps/api/documents/api.js";
+const TRANSPARENT_PIXEL =
+  "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
 
 let apiPromise: Promise<void> | undefined;
 
@@ -91,6 +102,8 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
 
     this.editor = new EditorCtor(this.placeholderId, this.buildConfig());
     window.APP = window.APP ?? {};
+    window.APP.AddImage = (callback, errorCallback) =>
+      this.addImageFromLocalFile(callback, errorCallback);
     this.editor.connectMockServer(this.createMockServer());
     this.fitEditorFrame();
     await (this.editor.waitForAppReady ?? Promise.resolve());
@@ -194,7 +207,8 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
           },
         ],
       }),
-      getImageURL: async () => "",
+      getImageURL: (name: string) =>
+        Promise.resolve(this.resolveMediaUrl(name)),
       onAuth: () => undefined,
       onMessage: (message: unknown) => this.handleOnlyOfficeMessage(message),
       onCorruptionWarning: (duplicateId: string) => {
@@ -257,6 +271,69 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
     return normalizeNativeBytes(bytes);
   }
 
+  private resolveMediaUrl(name: string): string {
+    const media = this.options.getMedia?.() ?? {};
+    const normalized = normalizeMediaName(name);
+    const direct = media[name] ?? media[normalized];
+    if (direct) {
+      return direct;
+    }
+
+    console.warn("ONLYOFFICE requested missing media asset", name);
+    return TRANSPARENT_PIXEL;
+  }
+
+  private addImageFromLocalFile(
+    callback: (result: { url: string }) => void,
+    errorCallback?: (error?: unknown) => void,
+  ): void {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept =
+      "image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/bmp";
+    input.style.position = "fixed";
+    input.style.left = "-10000px";
+    input.style.top = "0";
+    document.body.append(input);
+
+    const cleanup = () => input.remove();
+    input.addEventListener(
+      "change",
+      () => {
+        const file = input.files?.[0];
+        if (!file) {
+          cleanup();
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const dataUrl = String(reader.result);
+            const name = uniqueMediaName(file.name || "image.png");
+            const media = { ...(this.options.getMedia?.() ?? {}) };
+            media[name] = dataUrl;
+            media[normalizeMediaName(name)] = dataUrl;
+            this.options.onMediaChange?.(media);
+            callback({ url: dataUrl });
+          } catch (error) {
+            errorCallback?.(error);
+          } finally {
+            cleanup();
+          }
+        };
+        reader.onerror = () => {
+          errorCallback?.(reader.error);
+          cleanup();
+        };
+        reader.readAsDataURL(file);
+      },
+      { once: true },
+    );
+
+    input.click();
+  }
+
   private fitEditorFrame(): void {
     const host = document.getElementById(this.placeholderId);
     const iframe = this.editor?.getIframe?.();
@@ -290,6 +367,24 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
       // Some browsers can reject iframe access while ONLYOFFICE is still booting.
     }
   }
+}
+
+function normalizeMediaName(name: string): string {
+  return name.replaceAll("\\", "/").split("/").pop() ?? name;
+}
+
+function uniqueMediaName(originalName: string): string {
+  const basename = normalizeMediaName(originalName).replace(
+    /[^A-Za-z0-9._-]/g,
+    "_",
+  );
+  const extension = extensionFor(basename);
+  return `image-${crypto.randomUUID()}${extension}`;
+}
+
+function extensionFor(name: string): string {
+  const match = /\.[A-Za-z0-9]+$/.exec(name);
+  return match ? match[0].toLowerCase() : ".png";
 }
 
 function decodePatchMessage(patch: ArrayBuffer): unknown | undefined {

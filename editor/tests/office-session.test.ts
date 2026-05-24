@@ -22,6 +22,20 @@ describe("office session format", () => {
     expect(parsed?.source?.name).toBe("document.docx");
   });
 
+  it("roundtrips media sidecar assets", () => {
+    const session = createOfficeSession(
+      "docx",
+      new ArrayBuffer(1),
+      "with-media.docx",
+      {
+        "image1.png": "data:image/png;base64,AAAA",
+      },
+    );
+    const parsed = tryParseOfficeSession(serializeOfficeSession(session));
+
+    expect(parsed?.media["image1.png"]).toBe("data:image/png;base64,AAAA");
+  });
+
   it("stores encrypted collaboration patch payloads separately from checkpoints", () => {
     const session = createOfficeSession("pptx", new ArrayBuffer(1));
     const withChange = appendSessionChange(

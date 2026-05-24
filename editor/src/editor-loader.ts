@@ -7,6 +7,7 @@ import {
   serializeOfficeSession,
   tryParseOfficeSession,
   updateSessionCheckpoint,
+  updateSessionMedia,
   type OfficeSession,
 } from "./office-session";
 import { CryptPadOnlyOfficeAdapter } from "./onlyoffice-adapter";
@@ -16,22 +17,37 @@ import type {
   FileType,
   SaveResult,
 } from "./types";
-import { convertBinToOoxml, convertOoxmlToBin } from "./x2t-converter";
+import {
+  convertBinToOoxml,
+  convertOoxmlToInternalDocument,
+  type ConvertedMediaAsset,
+} from "./x2t-converter";
 
 export class EditorRuntime {
+  private readonly adapter: EditorAdapter;
+  private session: OfficeSession | undefined;
+
   constructor(
     private readonly config: EditorConfig,
-    private readonly adapter: EditorAdapter = new CryptPadOnlyOfficeAdapter({
-      fileType: config.fileType,
-      mode: config.mode,
-      title: config.displayName ?? "Untitled",
-      userId: config.userId,
-      userDisplayName: config.userDisplayName,
-    }),
+    adapter?: EditorAdapter,
     private readonly onStatus: (message: string) => void = () => undefined,
-  ) {}
-
-  private session: OfficeSession | undefined;
+  ) {
+    this.adapter =
+      adapter ??
+      new CryptPadOnlyOfficeAdapter({
+        fileType: config.fileType,
+        mode: config.mode,
+        title: config.displayName ?? "Untitled",
+        userId: config.userId,
+        userDisplayName: config.userDisplayName,
+        getMedia: () => this.session?.media ?? {},
+        onMediaChange: (media) => {
+          if (this.session) {
+            this.session = updateSessionMedia(this.session, media);
+          }
+        },
+      });
+  }
 
   async load(container: HTMLElement): Promise<void> {
     this.report("Fetching encrypted file...");
@@ -147,17 +163,18 @@ export class EditorRuntime {
     this.report(
       `Converting ${this.config.fileType.toUpperCase()} to ONLYOFFICE session format...`,
     );
-    const internalBytes = await withTimeout(
+    const imported = await withTimeout(
       convertOoxmlToInternal(plaintext, this.config.fileType),
       600_000,
       `Timed out while converting ${this.config.fileType.toUpperCase()}; this can happen with very large files or if x2t.wasm cannot initialize in the browser`,
     );
     this.session = createOfficeSession(
       this.config.fileType,
-      internalBytes,
+      imported.bytes,
       this.config.displayName,
+      mediaAssetsToSessionMedia(imported.media),
     );
-    return internalBytes;
+    return imported.bytes;
   }
 
   private requireSession(): OfficeSession {
@@ -171,9 +188,12 @@ export class EditorRuntime {
 async function convertOoxmlToInternal(
   bytes: ArrayBuffer,
   fileType: string,
-): Promise<ArrayBuffer> {
+): Promise<{
+  bytes: ArrayBuffer;
+  media: ConvertedMediaAsset[];
+}> {
   await ensureVendorPresent("x2t");
-  return convertOoxmlToBin(bytes, fileType as FileType);
+  return convertOoxmlToInternalDocument(bytes, fileType as FileType);
 }
 
 async function convertInternalToOoxml(
@@ -182,6 +202,35 @@ async function convertInternalToOoxml(
 ): Promise<ArrayBuffer> {
   await ensureVendorPresent("x2t");
   return convertBinToOoxml(bytes, fileType as FileType);
+}
+
+function mediaAssetsToSessionMedia(
+  assets: ConvertedMediaAsset[],
+): Record<string, string> {
+  const media: Record<string, string> = {};
+  for (const asset of assets) {
+    const dataUrl = assetToDataUrl(asset);
+    media[asset.name] = dataUrl;
+    const basename = asset.name.split("/").pop();
+    if (basename) {
+      media[basename] = dataUrl;
+    }
+  }
+  return media;
+}
+
+function assetToDataUrl(asset: ConvertedMediaAsset): string {
+  return `data:${asset.mimeType};base64,${bytesToBase64(
+    new Uint8Array(asset.bytes),
+  )}`;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
 }
 
 async function ensureVendorPresent(

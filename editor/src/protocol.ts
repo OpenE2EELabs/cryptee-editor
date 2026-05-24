@@ -47,17 +47,17 @@ export function parseFragment(hash = window.location.hash): EditorConfig {
   validateOrigin(callbackOrigin);
 
   const fileUrl = params.get("fileUrl") ?? "";
-  if (!fileUrl.startsWith("https://") && !fileUrl.startsWith("blob:")) {
-    throw new ProtocolError("fileUrl must be HTTPS or a browser Blob URL");
+  if (!isAllowedFileTransferUrl(fileUrl)) {
+    throw new ProtocolError(
+      "fileUrl must be HTTPS, a browser Blob URL, or localhost for development",
+    );
   }
 
   const saveUrl = params.get("saveUrl") ?? undefined;
-  if (
-    saveUrl &&
-    !saveUrl.startsWith("https://") &&
-    !saveUrl.startsWith("blob:")
-  ) {
-    throw new ProtocolError("saveUrl must be HTTPS when provided");
+  if (saveUrl && !isAllowedFileTransferUrl(saveUrl)) {
+    throw new ProtocolError(
+      "saveUrl must be HTTPS, a browser Blob URL, or localhost for development",
+    );
   }
 
   return {
@@ -73,6 +73,22 @@ export function parseFragment(hash = window.location.hash): EditorConfig {
     userId: params.get("userId") ?? undefined,
     userDisplayName: params.get("userDisplayName") ?? undefined,
   };
+}
+
+function isAllowedFileTransferUrl(value: string): boolean {
+  if (value.startsWith("https://") || value.startsWith("blob:")) {
+    return true;
+  }
+
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "http:" &&
+      ["localhost", "127.0.0.1", "::1"].includes(url.hostname)
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function validateOrigin(origin: string): void {

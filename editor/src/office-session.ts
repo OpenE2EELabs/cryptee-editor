@@ -38,13 +38,14 @@ export function createOfficeSession(
   fileType: FileType,
   editorBin: ArrayBuffer,
   displayName?: string,
+  media: Record<string, string> = {},
 ): OfficeSession {
   const now = new Date().toISOString();
   return {
     version: OFFICE_SESSION_VERSION,
     fileType,
     editorBin: editorBin.slice(0),
-    media: {},
+    media: { ...media },
     changes: [],
     createdAt: now,
     updatedAt: now,
@@ -52,6 +53,17 @@ export function createOfficeSession(
       name: displayName,
       importedFrom: "ooxml",
     },
+  };
+}
+
+export function updateSessionMedia(
+  session: OfficeSession,
+  media: Record<string, string>,
+): OfficeSession {
+  return {
+    ...session,
+    media: { ...media },
+    updatedAt: new Date().toISOString(),
   };
 }
 

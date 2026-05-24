@@ -95,6 +95,28 @@ PY
     printf 'ready\n' > "$dest/cryptee-vendor-ready.txt"
 }
 
+patch_onlyoffice_editor_artifact() {
+    local dest="$1"
+    local service_worker_src="$dest/sdkjs/common/serviceworker/document_editor_service_worker.js"
+    if [[ -f "$service_worker_src" && ! -f "$dest/document_editor_service_worker.js" ]]; then
+        cp "$service_worker_src" "$dest/document_editor_service_worker.js"
+    fi
+
+    local themes_src="$dest/web-apps/apps/common/main/resources/themes/themes.json"
+    if [[ -f "$themes_src" && ! -f "$dest/themes.json" ]]; then
+        cp "$themes_src" "$dest/themes.json"
+    fi
+
+    if [[ ! -f "$dest/plugins.json" ]]; then
+        printf '[]\n' > "$dest/plugins.json"
+    fi
+
+    local doc_formats_dir="$dest/web-apps/apps/common/main/resources/img/doc-formats"
+    if [[ -d "$doc_formats_dir" && ! -f "$doc_formats_dir/formats@2.5x.svg" ]]; then
+        printf '<svg xmlns="http://www.w3.org/2000/svg"/>\n' > "$doc_formats_dir/formats@2.5x.svg"
+    fi
+}
+
 mkdir -p "$DOWNLOAD_DIR"
 
 fetch_one() {
@@ -122,5 +144,6 @@ fetch_one() {
 
 fetch_one "cryptpad/onlyoffice-x2t-wasm" "x2t.zip" "$VENDOR_DIR/x2t"
 fetch_one "cryptpad/onlyoffice-editor" "onlyoffice-editor.zip" "$VENDOR_DIR/onlyoffice-editor"
+patch_onlyoffice_editor_artifact "$VENDOR_DIR/onlyoffice-editor"
 
 echo "vendor artifacts ready in $VENDOR_DIR"
