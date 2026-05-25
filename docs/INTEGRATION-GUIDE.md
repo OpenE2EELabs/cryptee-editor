@@ -78,6 +78,17 @@ The next `editor:saved` event will contain encrypted OOXML bytes with `documentF
 
 Generate a fresh `sessionId` for a collaborative editing room and share the same `sessionId`, `fileKey`, `fileUrl`, and `relayUrl` with authorized users. The editor derives a collaboration key from `fileKey` and `sessionId`, encrypts ONLYOFFICE change payloads in the browser, and sends only opaque bytes to the relay. The relay does not enforce authorization.
 
+For Pockio-style NAS/device uploads, treat the `cryptee-office-session-v1` object as the live editable object for DOCX, PPTX, and XLSX. Every user who should co-edit must receive URLs for that same encrypted active object plus the same `sessionId`; do not fork one uploaded Office file into per-user editor copies. When users want a normal Office file, call `parent:export-request` and offer the returned `documentFormat: "ooxml"` bytes as a download or compatibility handoff without replacing the active editable object unless the user explicitly finalizes it.
+
+Before calling a collaborative integration production-ready, verify:
+
+- Two browser windows with different `userId` values can join the same `sessionId`.
+- A patch from one browser reaches the other through the relay.
+- A late joiner receives relay history for the same session.
+- A browser using a different `sessionId` does not receive those patches.
+- Save persists `cryptee-office-session-v1` as the active editable object.
+- Export produces OOXML only through an explicit export request.
+
 ## Security Considerations For Integrators
 
 - Never log `fileKey`.
