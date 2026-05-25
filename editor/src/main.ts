@@ -27,8 +27,9 @@ async function boot(): Promise<void> {
       return;
     }
     const config = parseFragment();
+    let currentMode = config.mode;
     ui.setDisplayName(config.displayName);
-    ui.setMode(config.mode);
+    ui.setMode(currentMode);
     bridge = createProtocolBridge(config.callbackOrigin);
     const activeBridge = bridge;
     activeBridge.emit({ type: "editor:ready", version: VERSION });
@@ -56,8 +57,16 @@ async function boot(): Promise<void> {
         activeBridge.emit({ type: "editor:exit" });
       }
       if (event.type === "parent:update-permissions") {
-        runtime.getAdapter().setMode(event.mode);
-        ui.setMode(event.mode);
+        const mode =
+          event.mode ??
+          (event.canEdit === true
+            ? "edit"
+            : event.canEdit === false
+              ? "view"
+              : currentMode);
+        currentMode = mode;
+        runtime.getAdapter().setMode(mode);
+        ui.setMode(mode);
       }
       if (event.type === "parent:set-display-name") {
         runtime.getAdapter().setDisplayName(event.name);

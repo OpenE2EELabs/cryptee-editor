@@ -52,7 +52,7 @@ export type ParentToEditorEvent =
   | { type: "parent:save-request" }
   | { type: "parent:export-request"; format: FileType }
   | { type: "parent:exit-request" }
-  | { type: "parent:update-permissions"; mode: EditorMode }
+  | { type: "parent:update-permissions"; mode?: EditorMode; canEdit?: boolean }
   | { type: "parent:set-display-name"; name: string };
 
 export interface EditorAdapter {

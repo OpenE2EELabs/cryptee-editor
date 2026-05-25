@@ -1,5 +1,6 @@
 import type {
   EditorConfig,
+  EditorMode,
   EditorToParentEvent,
   FileType,
   ParentToEditorEvent,
@@ -38,7 +39,7 @@ export function parseFragment(hash = window.location.hash): EditorConfig {
     throw new ProtocolError(`Unsupported fileType: ${fileType}`);
   }
 
-  const mode = params.get("mode") ?? "edit";
+  const mode = modeFromParams(params);
   if (mode !== "edit" && mode !== "view") {
     throw new ProtocolError("mode must be 'edit' or 'view'");
   }
@@ -73,6 +74,29 @@ export function parseFragment(hash = window.location.hash): EditorConfig {
     userId: params.get("userId") ?? undefined,
     userDisplayName: params.get("userDisplayName") ?? undefined,
   };
+}
+
+function modeFromParams(params: URLSearchParams): EditorMode {
+  const explicitMode = params.get("mode");
+  const canEdit = params.get("canEdit") ?? params.get("editable");
+  const permission = params.get("permission") ?? params.get("permissions");
+  if (
+    canEdit === "true" ||
+    canEdit === "1" ||
+    permission === "edit" ||
+    permission === "write"
+  ) {
+    return "edit";
+  }
+  if (
+    canEdit === "false" ||
+    canEdit === "0" ||
+    permission === "view" ||
+    permission === "read"
+  ) {
+    return "view";
+  }
+  return (explicitMode ?? "edit") as EditorMode;
 }
 
 function isAllowedFileTransferUrl(value: string): boolean {
@@ -150,10 +174,18 @@ function isParentEvent(value: unknown): value is ParentToEditorEvent {
       (value as { format?: FileType }).format as FileType,
     );
   }
+  if (type === "parent:update-permissions") {
+    const event = value as { mode?: unknown; canEdit?: unknown };
+    return (
+      (event.mode === undefined ||
+        event.mode === "edit" ||
+        event.mode === "view") &&
+      (event.canEdit === undefined || typeof event.canEdit === "boolean")
+    );
+  }
   return (
     type === "parent:save-request" ||
     type === "parent:exit-request" ||
-    type === "parent:update-permissions" ||
     type === "parent:set-display-name"
   );
 }

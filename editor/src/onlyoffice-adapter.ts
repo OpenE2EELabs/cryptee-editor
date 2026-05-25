@@ -65,6 +65,7 @@ const ONLYOFFICE_API_URL =
   "./vendor/onlyoffice-editor/web-apps/apps/api/documents/api.js";
 const TRANSPARENT_PIXEL =
   "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
+const MAX_RIGHTS_UPDATE_ATTEMPTS = 20;
 
 let apiPromise: Promise<void> | undefined;
 
@@ -77,6 +78,8 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
   private blobUrl: string | undefined;
   private placeholderId = "";
   private changesIndex = 0;
+  private rightsUpdateTimer: number | undefined;
+  private rightsUpdateAttempts = 0;
 
   constructor(private readonly options: AdapterOptions) {}
 
@@ -108,6 +111,7 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
     this.fitEditorFrame();
     await (this.editor.waitForAppReady ?? Promise.resolve());
     this.fitEditorFrame();
+    this.scheduleRightsUpdate();
   }
 
   async exportDocument(): Promise<ArrayBuffer> {
@@ -117,11 +121,8 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
 
   setMode(mode: EditorMode): void {
     this.options.mode = mode;
-    try {
-      this.editor?.processRightsChange?.(mode === "edit");
-    } catch (error) {
-      console.warn("ONLYOFFICE rejected runtime rights update", error);
-    }
+    this.rightsUpdateAttempts = 0;
+    this.scheduleRightsUpdate();
   }
 
   setDisplayName(name: string): void {
@@ -145,6 +146,10 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
 
   destroy(): void {
     this.resizeObserver?.disconnect();
+    if (this.rightsUpdateTimer !== undefined) {
+      window.clearTimeout(this.rightsUpdateTimer);
+      this.rightsUpdateTimer = undefined;
+    }
     this.editor?.destroyEditor();
     if (this.blobUrl) {
       URL.revokeObjectURL(this.blobUrl);
@@ -176,8 +181,12 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
           id: this.options.userId ?? "anonymous",
           name: this.options.userDisplayName ?? "Anonymous",
         },
+        coEditing: {
+          mode: "fast",
+          change: true,
+        },
         customization: {
-          autosave: false,
+          autosave: true,
           compactHeader: true,
           forcesave: true,
         },
@@ -256,6 +265,31 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
         index: this.changesIndex,
         time: Date.now(),
       });
+    }
+  }
+
+  private scheduleRightsUpdate(delayMs = 0): void {
+    if (this.rightsUpdateTimer !== undefined) {
+      window.clearTimeout(this.rightsUpdateTimer);
+    }
+    this.rightsUpdateTimer = window.setTimeout(() => {
+      this.rightsUpdateTimer = undefined;
+      this.applyRightsUpdate();
+    }, delayMs);
+  }
+
+  private applyRightsUpdate(): void {
+    const enabled = this.options.mode === "edit";
+    try {
+      this.editor?.processRightsChange?.(enabled);
+      this.rightsUpdateAttempts = 0;
+    } catch (error) {
+      this.rightsUpdateAttempts += 1;
+      if (this.rightsUpdateAttempts < MAX_RIGHTS_UPDATE_ATTEMPTS) {
+        this.scheduleRightsUpdate(250);
+        return;
+      }
+      console.warn("ONLYOFFICE rejected runtime rights update", error);
     }
   }
 
