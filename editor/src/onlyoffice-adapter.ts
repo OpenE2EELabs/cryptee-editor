@@ -61,6 +61,36 @@ interface AdapterOptions {
   onMediaChange?: (media: Record<string, string>) => void;
 }
 
+type OutgoingSaveChangesMessage = {
+  type?: string;
+  changes?: unknown;
+  startSaveChanges?: boolean;
+  endSaveChanges?: boolean;
+  deleteIndex?: unknown;
+  excelAdditionalInfo?: unknown;
+  unlock?: unknown;
+  releaseLocks?: unknown;
+};
+
+type IncomingSaveChangesMessage = {
+  type: "saveChanges";
+  changes: Array<{
+    change: string;
+    time: number;
+    user: string;
+    useridoriginal: string;
+    username: string;
+  }>;
+  changesIndex: number;
+  syncChangesIndex: number;
+  startSaveChanges: boolean;
+  endSaveChanges: boolean;
+  deleteIndex?: unknown;
+  excelAdditionalInfo?: unknown;
+  unlock?: unknown;
+  releaseLocks?: unknown;
+};
+
 const ONLYOFFICE_API_URL =
   "./vendor/onlyoffice-editor/web-apps/apps/api/documents/api.js";
 const TRANSPARENT_PIXEL =
@@ -131,7 +161,8 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
 
   applyRemotePatch(patch: ArrayBuffer): void {
     const message = decodePatchMessage(patch);
-    if (message) {
+    if (isIncomingSaveChangesMessage(message)) {
+      this.changesIndex = Math.max(this.changesIndex, message.changesIndex);
       this.editor?.sendMessageToOO?.(message);
     }
   }
@@ -231,7 +262,7 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
       return;
     }
 
-    const msg = message as { type?: string; changes?: unknown; data?: unknown };
+    const msg = message as OutgoingSaveChangesMessage;
     if (msg.type === "isSaveLock") {
       this.editor?.sendMessageToOO?.({ type: "saveLock", saveLock: false });
       return;
@@ -242,20 +273,29 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
       return;
     }
 
-    if (msg.type === "saveChanges" || msg.type === "unSaveLock") {
-      const patchBytes = new TextEncoder().encode(JSON.stringify(msg));
+    if (msg.type === "saveChanges") {
+      const nextChangesIndex = this.changesIndex + 1;
+      const remoteMessage = createIncomingSaveChangesMessage(
+        msg,
+        this.options.userId ?? "local-user",
+        this.options.userDisplayName ?? "Local user",
+        nextChangesIndex,
+      );
+      if (!remoteMessage) {
+        return;
+      }
+      const patchBytes = new TextEncoder().encode(JSON.stringify(remoteMessage));
       const patch = patchBytes.buffer.slice(
         patchBytes.byteOffset,
         patchBytes.byteOffset + patchBytes.byteLength,
       ) as ArrayBuffer;
       this.localPatchHandlers.forEach((handler) => handler(patch));
-      if (msg.type === "saveChanges") {
-        this.editor?.sendMessageToOO?.({
-          type: "unSaveLock",
-          index: this.changesIndex++,
-          time: Date.now(),
-        });
-      }
+      this.changesIndex = nextChangesIndex;
+      this.editor?.sendMessageToOO?.({
+        type: "unSaveLock",
+        index: nextChangesIndex,
+        time: Date.now(),
+      });
       return;
     }
 
@@ -393,6 +433,73 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
       // Some browsers can reject iframe access while ONLYOFFICE is still booting.
     }
   }
+}
+
+export function createIncomingSaveChangesMessage(
+  message: OutgoingSaveChangesMessage,
+  userId: string,
+  username: string,
+  changesIndex: number,
+  time = Date.now(),
+): IncomingSaveChangesMessage | undefined {
+  if (message.type !== "saveChanges") {
+    return undefined;
+  }
+  const change = serializeOnlyOfficeChanges(message.changes);
+  if (!change) {
+    return undefined;
+  }
+  return {
+    type: "saveChanges",
+    changes: [
+      {
+        change,
+        time,
+        user: userId,
+        useridoriginal: userId,
+        username,
+      },
+    ],
+    changesIndex,
+    syncChangesIndex: changesIndex,
+    startSaveChanges: message.startSaveChanges !== false,
+    endSaveChanges: message.endSaveChanges !== false,
+    deleteIndex: message.deleteIndex,
+    excelAdditionalInfo: message.excelAdditionalInfo,
+    unlock: message.unlock,
+    releaseLocks: message.releaseLocks,
+  };
+}
+
+function serializeOnlyOfficeChanges(changes: unknown): string | undefined {
+  if (typeof changes === "string") {
+    try {
+      return Array.isArray(JSON.parse(changes)) ? changes : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return Array.isArray(changes) ? JSON.stringify(changes) : undefined;
+}
+
+function isIncomingSaveChangesMessage(
+  message: unknown,
+): message is IncomingSaveChangesMessage {
+  if (!message || typeof message !== "object") {
+    return false;
+  }
+  const candidate = message as Partial<IncomingSaveChangesMessage>;
+  return (
+    candidate.type === "saveChanges" &&
+    Number.isSafeInteger(candidate.changesIndex) &&
+    Array.isArray(candidate.changes) &&
+    candidate.changes.every(
+      (change) =>
+        change &&
+        typeof change === "object" &&
+        typeof change.change === "string",
+    )
+  );
 }
 
 function normalizeMediaName(name: string): string {
