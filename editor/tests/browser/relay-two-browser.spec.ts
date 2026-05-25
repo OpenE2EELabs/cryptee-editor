@@ -5,6 +5,7 @@ import type { Server } from "node:http";
 import type { Page } from "@playwright/test";
 
 const relayDependenciesInstalled = existsSync("../relay/node_modules/ws");
+const relayServerModule = "../../../relay/src/server";
 
 test.skip(
   !relayDependenciesInstalled,
@@ -15,7 +16,12 @@ test("two browsers share opaque patches through the same relay session", async (
   baseURL,
   browser,
 }) => {
-  const { createRelayServer } = await import("../../../relay/src/server");
+  const { createRelayServer } = (await import(relayServerModule)) as {
+    createRelayServer: (options: { maxPatchHistory: number }) => {
+      server: Server;
+      wss: { clients: Set<{ terminate: () => void }>; close: (callback: () => void) => void };
+    };
+  };
   const started = createRelayServer({ maxPatchHistory: 10 });
   const server = started.server;
   await new Promise<void>((resolve) => server.listen(0, resolve));
