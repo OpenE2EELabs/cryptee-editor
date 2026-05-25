@@ -272,15 +272,7 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
   }
 
   private resolveMediaUrl(name: string): string {
-    const media = this.options.getMedia?.() ?? {};
-    const normalized = normalizeMediaName(name);
-    const direct = media[name] ?? media[normalized];
-    if (direct) {
-      return direct;
-    }
-
-    console.warn("ONLYOFFICE requested missing media asset", name);
-    return TRANSPARENT_PIXEL;
+    return resolveOnlyOfficeMediaUrl(name, this.options.getMedia?.() ?? {});
   }
 
   private addImageFromLocalFile(
@@ -371,6 +363,28 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
 
 function normalizeMediaName(name: string): string {
   return name.replaceAll("\\", "/").split("/").pop() ?? name;
+}
+
+export function resolveOnlyOfficeMediaUrl(
+  name: string,
+  media: Record<string, string>,
+): string {
+  if (isInlineMediaUrl(name)) {
+    return name;
+  }
+
+  const normalized = normalizeMediaName(name);
+  const direct = media[name] ?? media[normalized];
+  if (direct) {
+    return direct;
+  }
+
+  console.warn("ONLYOFFICE requested missing media asset", name);
+  return TRANSPARENT_PIXEL;
+}
+
+function isInlineMediaUrl(value: string): boolean {
+  return value.startsWith("data:image/") || value.startsWith("blob:");
 }
 
 function uniqueMediaName(originalName: string): string {
