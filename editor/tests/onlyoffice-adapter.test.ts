@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createIncomingSaveChangesMessage,
   documentFileTypeFor,
+  rebaseIncomingSaveChangesMessage,
   resolveOnlyOfficeMediaUrl,
 } from "../src/onlyoffice-adapter";
 
@@ -79,5 +80,22 @@ describe("ONLYOFFICE adapter config", () => {
         1,
       ),
     ).toBeUndefined();
+  });
+
+  it("rebases simultaneous peer changes onto the local revision order", () => {
+    const remote = createIncomingSaveChangesMessage(
+      { type: "saveChanges", changes: "[]" },
+      "user-2",
+      "Collaborator",
+      1,
+      12345,
+    );
+
+    expect(
+      rebaseIncomingSaveChangesMessage(remote!, 1),
+    ).toMatchObject({
+      changesIndex: 2,
+      syncChangesIndex: 2,
+    });
   });
 });

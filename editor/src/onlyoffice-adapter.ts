@@ -162,8 +162,12 @@ export class CryptPadOnlyOfficeAdapter implements EditorAdapter {
   applyRemotePatch(patch: ArrayBuffer): void {
     const message = decodePatchMessage(patch);
     if (isIncomingSaveChangesMessage(message)) {
-      this.changesIndex = Math.max(this.changesIndex, message.changesIndex);
-      this.editor?.sendMessageToOO?.(message);
+      const rebased = rebaseIncomingSaveChangesMessage(
+        message,
+        this.changesIndex,
+      );
+      this.changesIndex = rebased.changesIndex;
+      this.editor?.sendMessageToOO?.(rebased);
     }
   }
 
@@ -468,6 +472,18 @@ export function createIncomingSaveChangesMessage(
     excelAdditionalInfo: message.excelAdditionalInfo,
     unlock: message.unlock,
     releaseLocks: message.releaseLocks,
+  };
+}
+
+export function rebaseIncomingSaveChangesMessage(
+  message: IncomingSaveChangesMessage,
+  currentChangesIndex: number,
+): IncomingSaveChangesMessage {
+  const changesIndex = currentChangesIndex + message.changes.length;
+  return {
+    ...message,
+    changesIndex,
+    syncChangesIndex: changesIndex,
   };
 }
 
